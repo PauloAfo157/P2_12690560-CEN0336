@@ -3,7 +3,15 @@
 import sys
 import re
 
+def validar_sequencia(seq):
+    # Verifica se a sequência contém apenas caracteres válidos de DNA/RNA
+    padrao_valido = re.compile("^[ACGTU]+$", re.IGNORECASE)
+    if not padrao_valido.match(seq):
+        raise ValueError("Sequência inválida. Apenas caracteres de DNA/RNA são permitidos.")
+
 def achar_maior_orf(seq):
+    validar_sequencia(seq)
+
     inicio_codon = "ATG"
     fim_codons = ["TAA", "TAG", "TGA"]
     maior_orf = ""
@@ -25,7 +33,8 @@ def achar_maior_orf(seq):
     return maior_orf
 
 def tradu_seq(seq):
-    # Dicionário de tradução de códons para aminoácidos
+    validar_sequencia(seq)
+
     tabela_codons = {
         'TTT': 'F', 'TTC': 'F', 'TTA': 'L', 'TTG': 'L',
         'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
@@ -41,7 +50,7 @@ def tradu_seq(seq):
         'GAT': 'D', 'GAC': 'D', 'GAA': 'E', 'GAG': 'E',
         'TGT': 'C', 'TGC': 'C', 'TGA': '*', 'TGG': 'W',
         'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R',
-    }
+        }
 
     proteina = ""
     for i in range(0, len(seq), 3):
@@ -54,62 +63,75 @@ def tradu_seq(seq):
     return proteina
 
 def write_fasta(outfile, identif, seq):
+    # Verifica se a sequência é válida antes de escrever
+    validar_sequencia(seq)
+
     outfile.write(f">{identif}\n{seq}\n")
 
 def main():
-    # Verifica se o número de argumentos é correto
-    if len(sys.argv) != 2:
-        print("Número de argumentos incorreto")
+    try:
+        # Verifica o número correto de argumentos
+        if len(sys.argv) != 2:
+            raise ValueError("Número de argumentos incorreto")
+
+        # Obtém o nome do arquivo de entrada a partir da linha de comando
+        input_file = sys.argv[1]
+
+        # Define os nomes dos arquivos de saída
+        output_fna = "ORF.fna"
+        output_faa = "ORF.faa"
+
+        # Abre os arquivos de saída para escrita
+        with open(input_file, "r") as infile, open(output_fna, "w") as fna_outfile, open(output_faa, "w") as faa_outfile:
+            atual_identif = ""
+            atual_seq = ""
+
+            # Loop sobre as linhas do arquivo de entrada
+            for l in infile:
+                # Verifica o início da sequência
+                if l.startswith(">"):
+                    # Se já existe uma sequência atual
+                    if atual_identif and atual_seq:
+                        process_record(fna_outfile, faa_outfile, atual_identif, atual_seq)
+
+                    # Atualiza o identificador e reinicia a sequência
+                    atual_identif = l.strip()[1:]
+                    atual_seq = ""
+                else:
+                    # Adiciona a linha na sequência atual
+                    atual_seq += l.strip()
+
+            # Processa o último registro no arquivo
+            if atual_identif and atual_seq:
+                process_record(fna_outfile, faa_outfile, atual_identif, atual_seq)
+
+    except ValueError as ve:
+        print(f"Erro de Valor: {ve}")
         sys.exit(1)
-
-    # Obtém o nome do arquivo de entrada a partir da linha de comando
-    input_file = sys.argv[1]
-
-    # Define os nomes dos arquivos de saída
-    output_fna = "ORF.fna"
-    output_faa = "ORF.faa"
-
-    # Abre os arquivos de saída para escrita
-    with open(input_file, "r") as infile, open(output_fna, "w") as fna_outfile, open(output_faa, "w") as faa_outfile:
-        atual_identif = ""
-        atual_seq = ""
-
-        # Loop sobre as linhas do arquivo de entrada
-        for l in infile:
-            # Verifica o início da sequência
-            if l.startswith(">"):
-                # Se já existe uma sequência atual
-                if atual_identif and atual_seq:
-                    process_record(fna_outfile, faa_outfile, atual_identif, atual_seq)
-
-                # Atualiza o identificador e reinicia a sequência
-                atual_identif = l.strip()[1:]
-                atual_seq = ""
-            else:
-                # Adiciona a linha na sequência atual
-                atual_seq += l.strip()
-
-        # Processa o último registro no arquivo
-        if atual_identif and atual_seq:
-            process_record(fna_outfile, faa_outfile, atual_identif, atual_seq)
-
+    except Exception as e:
+        print(f"Erro: {e}")
+        sys.exit(1)
 def process_record(fna_outfile, faa_outfile, identif, seq):
-    # Encontra o ORF mais longo na sequência
-    maior_orf = achar_maior_orf(seq)
+    try:
+        # Encontra o ORF mais longo na sequência
+        maior_orf = achar_maior_orf(seq)
 
-    # Traduz o ORF em um peptídeo
-    traduzida_seq = tradu_seq(maior_orf)
+        # Traduz o ORF em um peptídeo
+        traduzida_seq = tradu_seq(maior_orf)
 
-    # Calcula as coordenadas do ORF
-    frame = seq.find(maior_orf) % 3 + 1
-    start = seq.find(maior_orf)
-    end = start + len(maior_orf)
+        # Calcula as coordenadas do ORF
+        frame = seq.find(maior_orf) % 3 + 1
+        start = seq.find(maior_orf)
+        end = start + len(maior_orf)
 
-    # Cria identificadores para os arquivos de saída
-    identificador = f"_frame{frame}_{start}_{end}"
-    fna_identificador = f"{identif}{identificador}"
-    faa_identificador = f"{identif}{identificador}"
+        # Cria identificadores para os arquivos de saída
+        identificador = f"_frame{frame}_{start}_{end}"
+        fna_identificador = f"{identif}{identificador}"
+        faa_identificador = f"{identif}{identificador}"
 
-    # Escreve as sequências nos arquivos de saída
-    write_fasta(fna_outfile, fna_identificador, maior_orf)
-    write_fasta(faa_outfile, faa_identificador, traduzida_seq)
+        # Escreve as sequências nos arquivos de saída
+        write_fasta(fna_outfile, fna_identificador, maior_orf)
+        write_fasta(faa_outfile, faa_identificador, traduzida_seq)  # Adicionado esta linha
+
+    except Exception as e:
+        print(f"Erro ao processar o registro: {e}")
